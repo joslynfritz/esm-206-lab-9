@@ -44,9 +44,12 @@ library(stargazer)
 
 homes <- read_csv("slo_homes.csv")
 
+# When looking at data what questions come up as you check it out? 
 
 # b. Filter to only include cities "San Luis Obispo", "Santa Maria-Orcutt", "Atascadero", and "Arroyo Grande", and call this new subset 'homes_sub':
 
+homes_sub <- homes %>% 
+  filter( City == "Arroyo Grande" | City == "San Luis Obispo" | City == "Santa Maria-Orcutt" | City == "Atascadero")
 
 
 ```
@@ -76,6 +79,7 @@ by_city <- ggplot(homes_sub, aes(x = Price)) +
 
 by_city
 
+# Every step of the way look at the data and see what stands out. Here Santa Maria and SLO are the most dense. 
 ```
 
 Or another question: Overall relationship between home square footage and price, separated by City? 
@@ -90,6 +94,8 @@ by_sqft <- ggplot(homes_sub, aes(x = SqFt, y = Price)) +
 by_sqft
 
 # Observations here: Does relationship appear ~ linear? Anything else we can pick out re: trends, outliers, etc.? What is the general trend? Any outliers? Is there reason enough for us to omit it?
+
+# Allison says that these generally look linear, so we're okay to use the linear regression. 
 
 ```
 
@@ -107,11 +113,17 @@ Let's try this model a couple of different ways:
 Use summary() to view the model output and statistics.
 
 ```{r saturated}
+# NOTE: it makes no sense to add price per sqft because it will clearly show a linear relationsip between because price is embedded in price per sqft. this can lead to biased overfitting of model results. 
+# bedroom, bathroom, and sqft all dsecribe size, lets just use sqft 
 
 # a. Saturated model: 
+homes_lm1 <- lm(Price ~ City + SqFt + Bedrooms + Bathrooms + PricePerSqFt + Status, data = homes_sub)
 
+homes_lm1
 
 # b. Model summary:
+
+summary(homes_lm1)
 
 ```
 
@@ -121,29 +133,41 @@ The next model: Exclude price per square foot, and bedrooms/bathrooms (since the
 
 # a. Updated model with variables City, SqFt, and Status:
 
+homes_lm2 <- lm(Price ~ City + SqFt + Status, data = homes_sub)
+homes_lm2
+
+# This represents, that if all other variables remain the same, a house in SLO will be $34,000 more than in Arroyo Grande (since AG is the baseline)
+# it describes that for every 1 sqft increase the price should increase by $245.9
+
+
 # b. Model summary:
+summary(homes_lm2)
+
 
 ```
 
 Wait...but what if I wanted everything to be with respect to a Regular sale status? Then I need to change my factor levels. We've done this before, here we'll use a different function (fct_relevel) from *forcats* package in the tidyverse. 
 
+lm function says if you feed it qualitative variable it'll make it numeric and easier to deal with. 
+
 ```{r fct_relevel}
 
 # a. Set Status to class 'factor'
-
+homes_sub$Status <- factor(homes_sub$Status)
 
 # b. Check to ensure it's a factor now
-
+# use class() to check!
 
 # c. Check levels:
-
+levels(homes_sub$Status)
 
 # d. Reassign reference level of "Status" to "Regular":
+homes_sub$Status <- fct_relevel(homes_sub$Status, "Regular")
 
 
 # e. Now run the regression again - same equation, but now the reference level is different (Status = Regular): 
-
-
+homes_lm3 <- lm(Price ~ City + SqFt + Status, data = homes_sub)
+homes_lm3
 
 ```
 
@@ -159,7 +183,11 @@ Then we can evaluate model diagnostics using the plot() function:
 ```{r diagnostics}
 
 # a. Model diagnostics:
+plot(homes_lm3)
 
+# Look at Residuals vs Fitted graph, QQplot looks VERY normally distributed
+
+# Overall heterstadsticity os Okay, residuals normality definitely looks good, and conceptually and mathematically my model is making sense! 
 ```
 
 ###6. Model comparison by Akaike Information Criterion
@@ -170,7 +198,13 @@ The AIC is a quantitative metric for model "optimization" that balances complexi
 
 # a. AIC values for each model
 
+sat_aic <- AIC(homes_lm1)
+final_aic <- AIC(homes_lm3)
+
+# Lower value indicates a better model, and rn lm1 is lower than lm3 BUT that doesn't mean it's the better dataset. 
+
 # Answer: which would you pick? 
+# I would still pick homes_lm3 because of all the above reasons. "Overall heterstadsticity os Okay, residuals normality definitely looks good, and conceptually and mathematically my model is making sense! "
 
 ```
 
@@ -179,8 +213,9 @@ The AIC is a quantitative metric for model "optimization" that balances complexi
 ```{r stargazer, results = 'asis'}
 
 # a. Prepare a nice regression table:
+lm_table <- stargazer(homes_lm1, homes_lm3, type = "html")
 
-
+lm_table
 
 # Note: If you want to work with this in Word, save to html, open, copy and paste into Word. 
 
@@ -231,9 +266,14 @@ Make predictions for the new data using predict():
 ```{r predict}
 
 # a. Make predictions using the new data frame:
+price_predict <- predict(homes_lm3, 
+                         newdata = df_new, 
+                         se.fit = TRUE, 
+                         interval = "confidence")
+
 
 # b. Bind predictions to the data to make it actually useful:
-
+predict_df <- data.frame(df_new, price_predict)
 
 
 ```
@@ -244,6 +284,9 @@ Then visualize it!
 
 # Create a line graph with square footage on the x-axis, predicted price on y-axis, with color dependent on City and facet_wrapped by sale status (follow along):
 
+predict_graph <- ggplot(predict_df, aes(x = SqFt, y = fit.fit)) +
+  geom_line(aes(color = City)) +
+  facet_wrap(~Status)
 
 ```
 
